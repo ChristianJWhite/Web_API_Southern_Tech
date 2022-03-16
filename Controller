@@ -1,0 +1,269 @@
+
+using SouthTech.Data;
+using SouthTech.Dtos;
+using SouthTech.Helper;
+using SouthTech.Models;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Threading.Tasks;
+
+namespace SouthTech.Controllers
+{
+    [Route("api")]
+    [ApiController]
+    public class HomeController : Controller
+    {
+        private readonly IWebAPIRepo _repository;
+
+        public HomeController(IWebAPIRepo repository)
+        {
+            _repository = repository;
+
+        }
+
+
+        [HttpGet("GetLogo")]
+        public ActionResult GetLogo()
+        {
+            string path = Directory.GetCurrentDirectory();
+            string imgDir = System.IO.Path.Combine(path, "Images", "StaffPhotos");
+            string fileName1 = System.IO.Path.Combine(imgDir, "logo" + ".png");
+            string respHeader = "";
+            if (System.IO.File.Exists(fileName1))
+            {
+                respHeader = "image/png";
+                return PhysicalFile(fileName1, respHeader);
+            }
+            else
+                return NotFound();
+        }
+
+
+        [HttpGet("GetVersion")]
+        public ActionResult GetVersion()
+        {
+            string version = "V1";
+            return Ok(version);
+        }
+
+
+        [HttpGet("GetAllStaff")]
+        public ActionResult<IEnumerable<StaffOutDto>> GetStaff()
+        {
+            IEnumerable<Staff> staff = _repository.GetAllStaff();
+            IEnumerable<StaffOutDto> c = staff.Select(e => new StaffOutDto
+            { Id = e.Id, LastName = e.LastName, FirstName = e.FirstName, Title = e.Title, Email = e.Email, Tel = e.Tel, Url = e.Url, Research = e.Research });
+            return Ok(c);
+        }
+
+
+        [HttpGet("GetStaffPhoto/{ID}")]
+        public ActionResult GetStaffPhoto(string Id)
+        {
+            string path = Directory.GetCurrentDirectory();
+            string imgDir = System.IO.Path.Combine(path, "Images", "StaffPhotos");
+            string fileName1 = System.IO.Path.Combine(imgDir, Id + ".png");
+            string fileName2 = System.IO.Path.Combine(imgDir, Id + ".jpg");
+            string fileName3 = System.IO.Path.Combine(imgDir, Id + ".gif");
+            string fileName4 = System.IO.Path.Combine(imgDir, "default" + ".png");
+            string respHeader = "";
+            string fileName = "";
+            if (System.IO.File.Exists(fileName1))
+            {
+                respHeader = "image/png"; fileName = fileName1;
+                return PhysicalFile(fileName1, respHeader);
+            }
+            else if (System.IO.File.Exists(fileName2))
+            {
+                respHeader = "image/jpeg"; fileName = fileName2;
+                return PhysicalFile(fileName2, respHeader);
+            }
+            else if (System.IO.File.Exists(fileName3))
+            {
+                respHeader = "image/gif"; fileName = fileName3;
+                return PhysicalFile(fileName3, respHeader);
+            }
+            else
+                respHeader = "image/jpeg"; fileName = fileName4;
+            return PhysicalFile(fileName, respHeader);
+
+        }
+
+
+        [HttpGet("GetCard/{ID}")]
+        public ActionResult GetCard(int id)
+        {
+            Staff staff = _repository.GetStaffByID(id);
+            string path = Directory.GetCurrentDirectory();
+            string fileName = Path.Combine(path, "Images", "StaffPhotos", id + ".jpg");
+            string logoPath = Path.Combine(path, "Images", "StaffPhotos", "logo.png");
+            string photoString, photoType, logoString, newId;
+            ImageFormat imageFormat, logoImageFormat;
+            CardOutDto cardOut = new CardOutDto();
+
+            Image logoImage = Image.FromFile(logoPath);
+            logoImageFormat = logoImage.RawFormat;
+            logoImage = ImageHelper.Resize(logoImage, new Size(100, 100), out photoType);
+            logoString = ImageHelper.ImageToString(logoImage, logoImageFormat);
+            cardOut.Logo = logoString;
+
+            if (System.IO.File.Exists(fileName))
+            {
+                Image image = Image.FromFile(fileName);
+                imageFormat = image.RawFormat;
+                image = ImageHelper.Resize(image, new Size(200, 200), out photoType);
+                photoString = ImageHelper.ImageToString(image, imageFormat);
+            }
+            else
+            { 
+                Response.Headers.Add("Content-Type", "text/vcard");
+                cardOut.PhotoType = "UNKNOWN";
+                return Ok(cardOut);
+            }   
+            cardOut.Name = staff.Title + " " + staff.FirstName + " " + staff.LastName;
+            cardOut.Title = staff.Title;
+            cardOut.FName = staff.FirstName;
+            cardOut.LName = staff.LastName;
+            newId = staff.Id.ToString();
+            cardOut.Uid = newId;
+            cardOut.Org = "Southern Hemisphere Institue of Technology";
+            cardOut.Email = staff.Email;
+            cardOut.Tel = staff.Tel;
+            cardOut.Url = staff.Url;
+            cardOut.Photo = photoString;
+            cardOut.PhotoType = photoType;
+            cardOut.Categories = Helper.TextHelper.Filter(staff.Research);
+            Response.Headers.Add("Content-Type", "text/vcard");
+            return Ok(cardOut);
+        }
+
+
+        [HttpGet("GetItems/{name}")]
+        [HttpGet("GetItems")]
+        public ActionResult<IEnumerable<ProductsOutDto>> GetProducts(string name)
+        {
+            IEnumerable<Products> product = _repository.GetAllProducts();
+            IEnumerable<Products> productString = product.Where(e => e.Name.ToLower().Contains(name));
+            bool space = String.IsNullOrWhiteSpace(name);
+            if (space == true)
+            {
+                IEnumerable<ProductsOutDto> c = product.Select(e => new ProductsOutDto
+                { 
+                    Id = e.Id, 
+                    Name = e.Name, 
+                    Description = e.Description, 
+                    Price = e.Price 
+                });
+                return Ok(c);
+            }
+            else
+            {
+                IEnumerable<ProductsOutDto> c = productString.Select(productString => new ProductsOutDto
+                {
+                    Id = productString.Id,
+                    Name = productString.Name,
+                    Description = productString.Description,
+                    Price = productString.Price
+                });
+                return Ok(c);
+            }
+        }
+
+
+        [HttpGet("GetStaff/{ID}")]
+        public ActionResult<StaffOutDto> GetStaff(int id)
+        {
+            Staff staff = _repository.GetStaffByID(id);
+            if (staff == null)
+                return NotFound();
+            else
+            {
+                StaffOutDto c = new StaffOutDto
+                { 
+                    Id = staff.Id, 
+                    LastName = staff.LastName, 
+                    FirstName = staff.FirstName, 
+                    Title = staff.Title, 
+                    Email = staff.Email, 
+                    Tel = staff.Tel, 
+                    Url = staff.Url, 
+                    Research = staff.Research 
+                };
+                return Ok(c);
+            }
+        }
+
+
+        [HttpGet("GetItemPhoto/{ID}")]
+        public ActionResult GetItemPhoto(string Id)
+        {
+            string path = Directory.GetCurrentDirectory();
+            string imgDir = System.IO.Path.Combine(path, "Images", "ItemsImages");
+            string fileName1 = System.IO.Path.Combine(imgDir, Id + ".png");
+            string fileName2 = System.IO.Path.Combine(imgDir, Id + ".jpg");
+            string fileName3 = System.IO.Path.Combine(imgDir, Id + ".gif");
+            string fileName4 = System.IO.Path.Combine(imgDir, "default" + ".png");
+            string respHeader = "";
+            string fileName = "";
+            if (System.IO.File.Exists(fileName1))
+            {
+                respHeader = "image/png";
+                return PhysicalFile(fileName1, respHeader);
+            }
+            else if (System.IO.File.Exists(fileName2))
+            {
+                respHeader = "image/jpeg";
+                return PhysicalFile(fileName2, respHeader);
+            }
+            else if (System.IO.File.Exists(fileName3))
+            {
+                respHeader = "image/gif";
+                return PhysicalFile(fileName3, respHeader);
+            }
+            else
+                respHeader = "image/jpeg"; fileName = fileName4;
+            return PhysicalFile(fileName, respHeader);
+
+        }
+
+
+        [HttpPost("WriteComment")] 
+        public ActionResult<CommentOutDto> WriteComment(CommentInputDto comment) 
+        {
+            var userIP = Request.HttpContext.Connection.RemoteIpAddress;
+            Comments c = new Comments { Time = DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss"), Comment = comment.Comment, Name = comment.Name, IP = userIP.ToString() };
+            Comments addedComment = _repository.WriteComment(c);
+            CommentOutDto co = new CommentOutDto 
+            { 
+                Comment = addedComment.Comment, 
+                Name = addedComment.Name 
+            };
+            return CreatedAtAction(nameof(WriteComment), co);
+        }
+
+        [HttpGet("GetComments")]
+        public ActionResult<IEnumerable<CommentOutDto>> GetComments()
+        {
+            IEnumerable<Comments> comment = _repository.GetComments();
+            string commentResult = "";
+            foreach (Comments item in comment)
+            {
+                string tempString = "<p>" + item.Comment + " &mdash; " + item.Name + "</p>";
+                commentResult = tempString + commentResult;
+            }
+            ContentResult g = new ContentResult
+            {
+                Content = commentResult,
+                ContentType = "text/html",
+                StatusCode = (int)HttpStatusCode.OK,
+            };
+            return g;
+        }
+    }
+}
